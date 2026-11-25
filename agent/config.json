@@ -1,0 +1,44 @@
+{
+  "niche": "Web development: JavaScript, React, CSS and frontend tooling",
+  "audience": "Beginner to intermediate frontend developers",
+  "keywords": ["javascript", "react", "css", "typescript", "vite", "frontend", "web", "node", "html", "performance"],
+
+  "myBlogFeed": "https://dev.to/feed/abdulkudus_akanji_81c767b",
+  "competitorFeeds": [
+    { "name": "CSS-Tricks", "url": "https://css-tricks.com/feed/" },
+    { "name": "Smashing Magazine", "url": "https://www.smashingmagazine.com/feed/" },
+    { "name": "web.dev", "url": "https://web.dev/static/blog/feed.xml" },
+    { "name": "freeCodeCamp", "url": "https://www.freecodecamp.org/news/rss/" },
+    { "name": "DEV #javascript", "url": "https://dev.to/feed/tag/javascript" }
+  ],
+
+  "maxItemsPerFeed": 10,
+  "maxAgeDays": 14,
+  "archiveOverlapLimit": 0.5,
+
+  "scoreThreshold": 75,
+  "scoreWeights": { "relevance": 0.3, "gap": 0.3, "infoGain": 0.25, "freshness": 0.15 },
+
+  "maxPostsPerRun": 1,
+  "maxPostsPerWeek": 3,
+  "maxLlmCallsPerRun": 8,
+  "models": {
+    "score": "gemini-3.1-flash-lite",
+    "write": "gemini-2.5-flash",
+    "review": "gemini-2.5-flash",
+    "revise": "gemini-2.5-flash"
+  },
+  "maxCandidatesToScore": 15,
+
+  "trustedLinkDomains": [
+    "developer.mozilla.org", "caniuse.com", "web.dev", "react.dev", "nodejs.org",
+    "typescriptlang.org", "w3.org", "whatwg.org", "vite.dev", "github.com"
+  ],
+
+  "publisher": "devto",
+  "publishMode": "auto",
+  "autoPublishMinScore": 85,
+  "minAccuracyScore": 85,
+  "maxLivePostsPerDay": 1,
+  "minWords": 600
+}
