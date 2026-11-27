@@ -1,5 +1,5 @@
 // GapPilot agent: TRIGGER → MONITOR → SCORE & DECIDE → CREATE & VERIFY → GATE & ACT
-// Usage:  npm run agent          (live: real feeds, Gemini, Dev.to drafts)
+// Usage:  npm run agent          (live: real feeds, configured LLM providers, Dev.to drafts)
 //         npm run agent:mock     (sample feeds, fake LLM, drafts saved locally; no keys needed)
 import { readFile } from 'node:fs/promises';
 import { readFeed } from './lib/feeds.js';
@@ -35,12 +35,15 @@ async function main() {
     const killed = killSwitchActive();
     if (killed) return await trace.finish('killed', `Kill switch active: ${killed}`);
 
-    // Fail fast on missing keys, before spending any LLM calls.
+    // Fail fast when no configured provider key is available, before spending any LLM calls.
     if (!mock) {
       const missing = [];
-      const llmKey = providerKeyName(config.provider);
-      if (!llmKey) return await trace.finish('error', `Unknown provider "${config.provider}" in config.json (use "groq" or "gemini")`);
-      if (!process.env[llmKey]) missing.push(llmKey);
+      const configuredProviders = [config.provider, ...(config.fallbackProviders ?? [])];
+      const invalidProvider = configuredProviders.find((provider) => !providerKeyName(provider));
+      if (invalidProvider)
+        return await trace.finish('error', `Unknown provider "${invalidProvider}" in config.json (use "claude", "groq", or "gemini")`);
+      const configuredKeys = configuredProviders.map(providerKeyName).filter((key) => process.env[key]);
+      if (!configuredKeys.length) missing.push(configuredProviders.map(providerKeyName).join(' or '));
       if (config.publisher === 'devto' && !process.env.DEVTO_API_KEY) missing.push('DEVTO_API_KEY');
       if (missing.length) return await trace.finish('error', `Missing in .env: ${missing.join(', ')} (see .env.example)`);
     }
@@ -75,7 +78,17 @@ async function main() {
     log('score', `${candidates.length} candidates after filtering (${skipped.length} skipped)`);
     if (!candidates.length) return await trace.finish('no_opportunity', 'No qualifying opportunity found (no new topics).');
 
-    const llm = createLlm({ mock, maxCalls: config.maxLlmCallsPerRun, trace, provider: config.provider, models: config.models?.[config.provider] });
+    const llm = createLlm({
+      mock,
+      maxCalls: config.maxLlmCallsPerRun,
+      trace,
+      provider: config.provider,
+      models: config.models?.[config.provider],
+      fallbacks: (config.fallbackProviders ?? []).map((provider) => ({
+        provider,
+        models: config.models?.[provider] ?? {},
+      })),
+    });
     const scored = await scoreCandidates(candidates, { llm, config, archive });
     trace.data.scored = scored.map(({ title, source, link, total, scores, reason, angle }) => ({ title, source, link, total, scores, reason, angle }));
     const best = scored[0];

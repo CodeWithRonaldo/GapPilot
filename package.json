@@ -7,13 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test",
     "preview": "vite preview",
-    "agent": "node --env-file-if-exists=.env agent/run.js",
+    "agent": "node --env-file-if-exists=.env agent/cli.js",
     "agent:mock": "node agent/run.js --mock",
     "unpublish": "node --env-file-if-exists=.env agent/unpublish.js"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "fast-xml-parser": "^5.12.1",
+    "jsdom": "^31.0.1",
+    "playwright": "^1.65.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

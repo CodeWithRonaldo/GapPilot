@@ -22,8 +22,15 @@
   "maxPostsPerRun": 1,
   "maxPostsPerWeek": 3,
   "maxLlmCallsPerRun": 8,
-  "provider": "groq",
+  "provider": "claude",
+  "fallbackProviders": ["groq", "gemini"],
   "models": {
+    "claude": {
+      "score": "claude-sonnet-4-5",
+      "write": "claude-sonnet-4-5",
+      "review": "claude-sonnet-4-5",
+      "revise": "claude-sonnet-4-5"
+    },
     "groq": {
       "score": "openai/gpt-oss-20b",
       "write": "openai/gpt-oss-20b",
