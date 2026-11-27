@@ -13,13 +13,6 @@ function fitMeta(text, max = 155) {
   return cut.slice(0, cut.lastIndexOf(' ')).replace(/[\s,.;:]+$/, '') + '…';
 }
 
-// Models vary their key names; accept the common ones.
-function normalizeFaq(faq) {
-  return (Array.isArray(faq) ? faq : [])
-    .map((f) => ({ q: String(f?.q ?? f?.question ?? '').trim(), a: String(f?.a ?? f?.answer ?? '').trim() }))
-    .filter((f) => f.q && f.a);
-}
-
 function isTrustedLink(link, trustedDomains) {
   try {
     const host = new URL(link).hostname.replace(/^www\./, '');
@@ -59,50 +52,62 @@ Write a complete, original, genuinely useful post (at least ${config.minWords} w
 - Cover the subtopics the competitor likely missed.
 - Do not invent statistics, quotes, or URLs.
 - Do not start the body with the title (no # heading).
-- End the body with a "## FAQ" section of 3 questions, and repeat those 3 questions in the "faq" field.
+- End the body with a "## FAQ" section: 3 questions as ### headings, each followed by its answer.
 
-Respond with JSON exactly in this shape:
-{"title":"SEO title, max 70 chars","meta_description":"max 150 characters","tags":["up to 4 lowercase tags, no spaces"],"body_markdown":"...","faq":[{"q":"question text","a":"answer text"}]}`;
+${POST_FORMAT}`;
 
   const mockResponse = () => {
     const section = (h) => `## ${h}\n\n${'This section explains the idea with a practical example, shows the common mistakes beginners make, and gives a clear checklist you can use today. '.repeat(6)}\n`;
-    return {
-      title: topic.title.slice(0, 70),
-      meta_description: `A practical guide to ${topic.title.toLowerCase()} with examples, common mistakes and a checklist.`.slice(0, 155),
-      tags: ['webdev', 'javascript', 'tutorial'],
-      body_markdown: ['Why this matters', 'How it works', 'Step-by-step example', 'Common mistakes', 'Checklist'].map(section).join('\n')
-        + '\n## FAQ\n\n**Is this beginner friendly?** Yes.\n\n**Do I need a framework?** No.\n\n**Where do I start?** With the example above.\n',
-      faq: [
-        { q: 'Is this beginner friendly?', a: 'Yes.' },
-        { q: 'Do I need a framework?', a: 'No.' },
-        { q: 'Where do I start?', a: 'With the example above.' },
-      ],
-    };
+    const text = [
+      `TITLE: ${topic.title.slice(0, 70)}`,
+      `META: A practical guide to ${topic.title.toLowerCase()} with examples, common mistakes and a checklist.`,
+      'TAGS: webdev, javascript, tutorial',
+      '---BODY---',
+      ['Why this matters', 'How it works', 'Step-by-step example', 'Common mistakes', 'Checklist'].map(section).join('\n'),
+      '## FAQ\n\n### Is this beginner friendly?\nYes.\n\n### Do I need a framework?\nNo.\n\n### Where do I start?\nWith the example above.\n',
+    ].join('\n');
+    return { text, searches: [], sources: [] };
   };
 
-  const schema = {
-    type: 'OBJECT',
-    properties: {
-      title: { type: 'STRING' },
-      meta_description: { type: 'STRING' },
-      tags: { type: 'ARRAY', items: { type: 'STRING' } },
-      body_markdown: { type: 'STRING' },
-      faq: {
-        type: 'ARRAY',
-        items: { type: 'OBJECT', properties: { q: { type: 'STRING' }, a: { type: 'STRING' } }, required: ['q', 'a'] },
-      },
-    },
-    required: ['title', 'meta_description', 'tags', 'body_markdown', 'faq'],
-  };
-  const draft = await llm.generateJson('write', prompt, mockResponse, { schema });
+  const out = await llm.generateText('write', prompt, mockResponse, { maxTokens: 6000, reasoning: 'low' });
+  return { ...parsePost(out.text), source_topic: { title: topic.title, link: topic.link, source: topic.source } };
+}
+
+// Articles come back as plain Markdown with labelled header lines (no JSON escaping to break).
+export const POST_FORMAT = `Reply in EXACTLY this format, with nothing before TITLE:
+TITLE: <SEO title, max 70 characters>
+META: <meta description, max 150 characters>
+TAGS: <up to 4 lowercase tags, comma-separated, no spaces inside a tag>
+---BODY---
+<the full post in Markdown>`;
+
+/** Parses the POST_FORMAT reply into a draft. Throws if the body is missing. */
+export function parsePost(text) {
+  const cleaned = text.replace(/^\s*```(?:markdown|md)?\s*\n/i, '').replace(/\n```\s*$/, '');
+  const [head, ...rest] = cleaned.split(/^\s*-{3}\s*BODY\s*-{3}\s*$/im);
+  if (!rest.length) throw new Error('Writer reply is missing the ---BODY--- separator');
+  // Accepts "TITLE: x", "**TITLE:** x" and "**TITLE**: x"; strips quotes and stray asterisks.
+  const field = (name) =>
+    (head.match(new RegExp(`^\\s*\\**\\s*${name}\\s*\\**\\s*:\\s*\\**\\s*(.+)$`, 'im'))?.[1] ?? '')
+      .replace(/\*+\s*$/, '')
+      .trim();
+
+  // Drop a leading "# Title" line if the model repeated the title in the body.
+  const body = rest.join('\n').trim().replace(/^#\s+[^\n]*\n+/, '');
+  const title = field('TITLE').replace(/^["']|["']$/g, '');
+  const faqSection = body.split(/^##\s+(?:FAQ|Frequently Asked[^\n]*)\s*$/im)[1] ?? '';
+  const faqQuestions = faqSection
+    .split('\n')
+    .map((l) => l.replace(/^[#*\s\d.]+|\**\s*$/g, '').trim())
+    .filter((l) => l.endsWith('?'));
+
   return {
-    title: String(draft.title ?? '').trim(),
-    slug: slugify(String(draft.title ?? topic.title)),
-    meta_description: fitMeta(String(draft.meta_description ?? '').trim()),
-    tags: (Array.isArray(draft.tags) ? draft.tags : []).map((t) => String(t).toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean).slice(0, 4),
-    body_markdown: String(draft.body_markdown ?? ''),
-    faq: normalizeFaq(draft.faq),
-    source_topic: { title: topic.title, link: topic.link, source: topic.source },
+    title,
+    slug: slugify(title),
+    meta_description: fitMeta(field('META').replace(/^["']|["']$/g, '')),
+    tags: field('TAGS').split(',').map((t) => t.toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean).slice(0, 4),
+    body_markdown: body,
+    faq: faqQuestions.map((q) => ({ q, a: '(see post)' })),
   };
 }
 

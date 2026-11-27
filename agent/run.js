@@ -3,7 +3,7 @@
 //         npm run agent:mock     (sample feeds, fake LLM, drafts saved locally; no keys needed)
 import { readFile } from 'node:fs/promises';
 import { readFeed } from './lib/feeds.js';
-import { createLlm } from './lib/llm.js';
+import { createLlm, providerKeyName } from './lib/llm.js';
 import { prefilter, scoreCandidates } from './lib/score.js';
 import { writeDraft, verifyDraft, saveRejectedDraft } from './lib/write.js';
 import { getPublisher } from './lib/publisher.js';
@@ -38,7 +38,9 @@ async function main() {
     // Fail fast on missing keys, before spending any LLM calls.
     if (!mock) {
       const missing = [];
-      if (!process.env.GEMINI_API_KEY) missing.push('GEMINI_API_KEY');
+      const llmKey = providerKeyName(config.provider);
+      if (!llmKey) return await trace.finish('error', `Unknown provider "${config.provider}" in config.json (use "groq" or "gemini")`);
+      if (!process.env[llmKey]) missing.push(llmKey);
       if (config.publisher === 'devto' && !process.env.DEVTO_API_KEY) missing.push('DEVTO_API_KEY');
       if (missing.length) return await trace.finish('error', `Missing in .env: ${missing.join(', ')} (see .env.example)`);
     }
@@ -73,7 +75,7 @@ async function main() {
     log('score', `${candidates.length} candidates after filtering (${skipped.length} skipped)`);
     if (!candidates.length) return await trace.finish('no_opportunity', 'No qualifying opportunity found (no new topics).');
 
-    const llm = createLlm({ mock, maxCalls: config.maxLlmCallsPerRun, trace, models: config.models });
+    const llm = createLlm({ mock, maxCalls: config.maxLlmCallsPerRun, trace, provider: config.provider, models: config.models?.[config.provider] });
     const scored = await scoreCandidates(candidates, { llm, config, archive });
     trace.data.scored = scored.map(({ title, source, link, total, scores, reason, angle }) => ({ title, source, link, total, scores, reason, angle }));
     const best = scored[0];
@@ -99,27 +101,32 @@ async function main() {
     log('verify', check.failures.length ? `Draft FAILED checks: ${check.failures.join('; ')}` : `Draft passed checks (${check.wordCount} words)`);
     if (check.failures.length) return await blockDraft(check.failures);
 
-    // 4b. STRICT AI FACT-CHECK (one revision round if needed)
-    const reviewLabel = (r) => `${r.verdict}, accuracy ${r.accuracyScore}, ${r.counts.critical} critical / ${r.counts.major} major / ${r.counts.minor} minor, ${r.searches.length} searches, ${r.sources.length} sources`;
-    let review = await reviewDraft(draft, { llm, config });
-    trace.data.reviews = [{ round: 1, ...review }];
-    log('review', `Round 1: ${reviewLabel(review)}`);
-
-    if (review.counts.critical + review.counts.major > 0) {
-      draft = await reviseDraft(draft, review, { llm, config });
-      check = verifyDraft(draft, { config, archive });
-      recordDraft();
-      log('revise', check.failures.length ? `Revision FAILED checks: ${check.failures.join('; ')}` : `Revision passed checks (${check.wordCount} words)`);
-      if (check.failures.length) return await blockDraft(check.failures);
-
+    // 4b. STRICT AI FACT-CHECK (one revision round if needed). Can be switched off with "factCheck": false.
+    let review = null;
+    if (config.factCheck === false) {
+      log('review', 'Fact-check DISABLED in config.json ("factCheck": false): post is not fact-checked');
+    } else {
+      const reviewLabel = (r) => `${r.verdict}, accuracy ${r.accuracyScore}, ${r.counts.critical} critical / ${r.counts.major} major / ${r.counts.minor} minor, ${r.searches.length} searches, ${r.sources.length} sources`;
       review = await reviewDraft(draft, { llm, config });
-      trace.data.reviews.push({ round: 2, ...review });
-      log('review', `Round 2: ${reviewLabel(review)}`);
-    }
+      trace.data.reviews = [{ round: 1, ...review }];
+      log('review', `Round 1: ${reviewLabel(review)}`);
 
-    // Critical problems left after revision: never send anywhere, keep locally for the human.
-    if (review.counts.critical > 0)
-      return await blockDraft(review.issues.filter((i) => i.severity === 'critical').map((i) => `Critical: ${i.problem}`));
+      if (review.counts.critical + review.counts.major > 0) {
+        draft = await reviseDraft(draft, review, { llm, config });
+        check = verifyDraft(draft, { config, archive });
+        recordDraft();
+        log('revise', check.failures.length ? `Revision FAILED checks: ${check.failures.join('; ')}` : `Revision passed checks (${check.wordCount} words)`);
+        if (check.failures.length) return await blockDraft(check.failures);
+
+        review = await reviewDraft(draft, { llm, config });
+        trace.data.reviews.push({ round: 2, ...review });
+        log('review', `Round 2: ${reviewLabel(review)}`);
+      }
+
+      // Critical problems left after revision: never send anywhere, keep locally for the human.
+      if (review.counts.critical > 0)
+        return await blockDraft(review.issues.filter((i) => i.severity === 'critical').map((i) => `Critical: ${i.problem}`));
+    }
 
     // 5. GATE & ACT (the only external write). Live vs draft is decided in code.
     const dayAgo = Date.now() - 86400000;
@@ -132,7 +139,7 @@ async function main() {
     if (killedNow) return await trace.finish('killed', `Kill switch activated before publishing: ${killedNow}`);
 
     const publisher = getPublisher(config.publisher);
-    const result = await publisher.createPost(draft, { live: decision.live });
+    const result = await publisher.createPost(draft, { live: decision.live, factChecked: review !== null });
     trace.data.published = { publisher: publisher.name, ...result };
     state.published.push({ key: best.key, id: result.id, title: draft.title, url: result.url, publisher: publisher.name, live: result.live, at: new Date().toISOString() });
     await saveState(state, mock); // saved immediately so a retry can never double-post

@@ -46,6 +46,9 @@ export default function RunDetail({ run }) {
 
       {run.decision && (
         <Section title="Publish decision">
+          {run.decision.factChecked === false && (
+            <p className={styles.meta}>⚠️ Fact-check was switched off for this run ("factCheck": false)</p>
+          )}
           {run.decision.live ? (
             <p className={styles.pass}>All rules passed, so the post was published live.</p>
           ) : (
@@ -67,11 +70,11 @@ export default function RunDetail({ run }) {
           {review.summary && <p className={styles.summary}>{review.summary}</p>}
           {review.searches?.length > 0 || review.sources?.length > 0 ? (
             <p className={styles.meta}>
-              {review.searches?.length ?? 0} Google searches
+              {review.searches?.length ?? 0} web searches
               {review.sources?.length > 0 && <> · checked against: {review.sources.join(', ')}</>}
             </p>
           ) : (
-            <p className={styles.meta}>⚠️ No Google searches run</p>
+            <p className={styles.meta}>⚠️ No web searches run</p>
           )}
           {review.claimsChecked?.length > 0 && (
             <ul className={styles.list}>

@@ -6,6 +6,8 @@ and saves it as a **draft** on Dev.to. No real opportunity = no post.
 
 Competitor posts are used only as *topic signals*. GapPilot never copies their content.
 
+> **New to the project?** Read [docs/HANDOFF.md](docs/HANDOFF.md): current status, known issues, and where to continue.
+
 ## Quick start (no keys needed)
 
 ```bash
@@ -17,7 +19,7 @@ npm run dev          # dashboard at http://localhost:5173
 ## Live mode
 
 1. `cp .env.example .env` and add:
-   - `GEMINI_API_KEY`: free at https://aistudio.google.com/apikey
+   - `GROQ_API_KEY`: free at https://console.groq.com/keys (or `GEMINI_API_KEY` with `"provider": "gemini"` in config)
    - `DEVTO_API_KEY`: Dev.to > Settings > Extensions
 2. Edit `agent/config.json`: your niche, keywords, your blog feed, and competitor feeds.
 3. `npm run agent`
@@ -37,7 +39,7 @@ Every run writes `data/traces/<run>.json` and `<run>.md`, which the dashboard di
 ## Safety (enforced in code)
 
 - **Kill switch:** `KILL_SWITCH=true` in `.env`, or create the file `agent/KILL_SWITCH`. Checked at start and right before publishing.
-- **Strict AI fact-check:** a separate reviewer pass checks every claim, code sample, command and version, with one revision round. Posts with critical issues left are never sent anywhere (saved to `data/rejected/`).
+- **Strict AI fact-check (switch: `"factCheck"` in config; currently OFF to save tokens):** a separate reviewer pass checks every claim, code sample, command and version, with one revision round. Posts with critical issues left are never sent anywhere (saved to `data/rejected/`).
 - **Live publishing rules (in code):** live only if `publishMode` is `"auto"`, topic score ≥ 85 (`autoPublishMinScore`), reviewer approves, reviewer ran Google searches, no critical/major issues, accuracy ≥ 85, and under 1 live post per day. Otherwise it becomes a draft.
 - **Disclosure:** every post ends with an AI-assistance note.
 - **Undo:** `npm run unpublish` turns the latest live post back into a draft.

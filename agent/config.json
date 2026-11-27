@@ -22,11 +22,20 @@
   "maxPostsPerRun": 1,
   "maxPostsPerWeek": 3,
   "maxLlmCallsPerRun": 8,
+  "provider": "groq",
   "models": {
-    "score": "gemini-3.1-flash-lite",
-    "write": "gemini-2.5-flash",
-    "review": "gemini-2.5-flash",
-    "revise": "gemini-2.5-flash"
+    "groq": {
+      "score": "openai/gpt-oss-20b",
+      "write": "openai/gpt-oss-20b",
+      "review": "openai/gpt-oss-120b",
+      "revise": "openai/gpt-oss-120b"
+    },
+    "gemini": {
+      "score": "gemini-3.1-flash-lite",
+      "write": "gemini-2.5-flash",
+      "review": "gemini-2.5-flash",
+      "revise": "gemini-2.5-flash"
+    }
   },
   "maxCandidatesToScore": 15,
 
@@ -37,8 +46,10 @@
 
   "publisher": "devto",
   "publishMode": "auto",
-  "autoPublishMinScore": 85,
+  "factCheck": false,
+  "autoPublishMinScore": 75,
   "minAccuracyScore": 85,
   "maxLivePostsPerDay": 1,
   "minWords": 600
 }
+

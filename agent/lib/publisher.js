@@ -3,7 +3,11 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { DATA_DIR } from './guards.js';
 
-const DISCLOSURE = '\n\n---\n\n*This post was drafted with AI assistance and fact-checked by an automated AI review before publishing.*\n';
+// The note must match what actually happened: only claim a fact-check if one ran.
+const disclosure = (factChecked) =>
+  factChecked
+    ? '\n\n---\n\n*This post was drafted with AI assistance and fact-checked by an automated AI review before publishing.*\n'
+    : '\n\n---\n\n*This post was drafted with AI assistance.*\n';
 
 function frontmatter(draft, live) {
   const yaml = (s) => JSON.stringify(s); // JSON strings are valid YAML strings
@@ -20,10 +24,10 @@ function frontmatter(draft, live) {
 
 const mockPublisher = {
   name: 'mock',
-  async createPost(draft, { live }) {
+  async createPost(draft, { live, factChecked = true }) {
     const dir = new URL('drafts/', DATA_DIR);
     await mkdir(dir, { recursive: true });
-    await writeFile(new URL(`${draft.slug}.md`, dir), frontmatter(draft, live) + draft.body_markdown + DISCLOSURE);
+    await writeFile(new URL(`${draft.slug}.md`, dir), frontmatter(draft, live) + draft.body_markdown + disclosure(factChecked));
     return { id: draft.slug, url: `data/drafts/${draft.slug}.md`, live };
   },
   async unpublish(id) {
@@ -50,10 +54,10 @@ async function devtoRequest(method, path, article) {
 
 const devtoPublisher = {
   name: 'devto',
-  async createPost(draft, { live }) {
+  async createPost(draft, { live, factChecked = true }) {
     const data = await devtoRequest('POST', '/articles', {
       title: draft.title,
-      body_markdown: draft.body_markdown + DISCLOSURE,
+      body_markdown: draft.body_markdown + disclosure(factChecked),
       description: draft.meta_description,
       tags: draft.tags,
       published: live === true, // only an explicit true goes live
